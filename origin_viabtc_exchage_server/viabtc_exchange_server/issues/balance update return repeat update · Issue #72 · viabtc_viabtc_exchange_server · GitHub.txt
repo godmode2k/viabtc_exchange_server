@@ -1,0 +1,94 @@
+
+
+https://github.com/viabtc/viabtc_exchange_server/issues/72
+
+ balance update return repeat update #72
+Closed
+mikezit opened this issue Mar 14, 2018 · 4 comments 
+
+
+Comments
+@mikezit
+mikezit commented Mar 14, 2018
+
+你好：
+第一次运行结果
+첫 실행 결과
+./cli.exe 192.168.0.100 7316 102 '[1, "LTC", "deposit", 10001, "100000",{}]'
+{
+"id": 0,
+"error": null,
+"result": {
+"status": "success"
+}
+}
+
+第二次得到
+두 번째로 얻을
+./cli.exe 192.168.0.100 7316 102 '[1, "LTC", "deposit", 10001, "100000",{}]'
+{
+"id": 0,
+"error": {
+"message": "repeat update",
+"code": 10
+},
+"result": null
+}
+
+查看代码是下面返回了-1
+-1을 반환하려면 아래 코드를 확인하십시오.
+int update_user_balance(bool real, uint32_t user_id, const char *asset, const char *business, uint64_t business_id, mpd_t *change, json_t *detail)
+{
+struct update_key key;
+key.user_id = user_id;
+strncpy(key.asset, asset, sizeof(key.asset));
+strncpy(key.business, business, sizeof(key.business));
+key.business_id = business_id;
+
+dict_entry *entry = dict_find(dict_update, &key);
+if (entry) {
+    return -1;
+}
+
+..........
+
+请问这样设计的逻辑是什么？
+이 디자인의 논리는 무엇입니까?
+
+///////////
+另外，是否有情况发生这样的事，有人攻破进入martchmachine部署的服务器,随意修改balance,然后随意下单，引起市场价格剧烈波动。
+또한 마치머신이 배치한 서버에 누군가 침입해 마음대로 잔고를 수정한 뒤 마음대로 주문을 넣어 시세가 급변하는 일이 있는가.
+
+感谢。
+고마워하는.
+
+@sheepy0905
+Contributor
+sheepy0905 commented Mar 23, 2018
+
+防止重复入账。
+이중 입력을 방지합니다.
+
+@mikezit
+Author
+mikezit commented Mar 24, 2018
+
+问题是，如果真的是连续充值同一个币种两次，怎么处理呢？
+문제는 같은 화폐가 연속으로 두 번 충전되는 것이 사실이라면 어떻게 대처하느냐다.
+
+@yuliyuanchn
+yuliyuanchn commented Apr 14, 2018
+
+"deposit", 10001
+這兩個參數，第一個是業務類型，第二個是業務ID，如果都是充值，換個業務ID就可以了
+이 두 매개 변수, 첫 번째는 비즈니스 유형이고 두 번째는 비즈니스 ID입니다. 둘 다 충전되면 비즈니스 ID를 변경하십시오.
+
+@haipome haipome closed this as completed Apr 15, 2018
+@mikezit
+Author
+mikezit commented Apr 17, 2018
+
+业务类型和业务ID是对应的吧，你的意思是10001是递增的？
+업종과 업종이 일치하는데 10001이 증가한다는 말씀이신가요?
+
+

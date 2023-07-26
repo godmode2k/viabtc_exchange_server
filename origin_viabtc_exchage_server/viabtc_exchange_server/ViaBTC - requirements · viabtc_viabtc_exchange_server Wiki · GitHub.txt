@@ -1,0 +1,35 @@
+
+https://github.com/viabtc/viabtc_exchange_server/wiki/requirements
+
+
+requirements
+haipo yang edited this page Apr 27, 2017 · 5 revisions 
+
+
+    zookeeper
+ - https://zookeeper.apache.org/
+
+    kafka
+ - https://kafka.apache.org/
+
+    librdkafka
+ - https://github.com/edenhill/librdkafka
+
+    libev
+ - http://software.schmorp.de/pkg/libev.html
+
+    libmpdec
+ - http://www.bytereef.org/mpdecimal/
+
+    jansson
+ - http://www.digip.org/jansson/
+
+    libmysqlclient-dev (apt-get install libmysqlclient-dev)
+
+    http_parser
+ - https://github.com/nodejs/http-parser
+
+    libcurl
+ - https://curl.haxx.se/libcurl/
+
+

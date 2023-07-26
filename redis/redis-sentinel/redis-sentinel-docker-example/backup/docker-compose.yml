@@ -1,0 +1,84 @@
+version: '2.1'
+services:
+
+  redis1:
+    image: redis:4.0.10
+#    expose:
+#      - 6379
+    ports:
+      - "6380:6379"
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.10
+
+  sentinel1:
+    image: redis:4.0.10
+#    expose:
+    ports:
+      - "26380:26379"
+    volumes:
+#      - ./.sentinel1.conf:/etc/sentinel.conf
+      - ./sentinel1.conf:/etc/sentinel.conf:rw
+    command: redis-server /etc/sentinel.conf --sentinel
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.11
+
+  redis2:
+    image: redis:4.0.10
+#    expose:
+#      - 6379
+    ports:
+      - "6381:6379"
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.12
+
+  sentinel2:
+    image: redis:4.0.10
+#    expose:
+    ports:
+      - "26381:26379"
+    volumes:
+#      - ./.sentinel2.conf:/etc/sentinel.conf
+      - ./sentinel2.conf:/etc/sentinel.conf:rw
+    command: redis-server /etc/sentinel.conf --sentinel
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.13
+
+  redis3:
+    image: redis:4.0.10
+#    expose:
+#      - 6379
+    ports:
+      - "6382:6379"
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.14
+
+  sentinel3:
+    image: redis:4.0.10
+#    expose:
+    ports:
+      - "26382:26379"
+    volumes:
+#      - ./.sentinel3.conf:/etc/sentinel.conf
+      - ./sentinel3.conf:/etc/sentinel.conf:rw
+    command: redis-server /etc/sentinel.conf --sentinel
+#    networks:
+#      foonet:
+#        ipv4_address: 172.19.0.15
+
+#networks:
+#  foonet:
+#    driver: bridge
+#    ipam:
+#      driver: default
+#      config:
+#        - subnet: 172.19.0.0/24
+
+volumes:
+  sentinel1.conf:
+  sentinel2.conf:
+  sentinel3.conf:

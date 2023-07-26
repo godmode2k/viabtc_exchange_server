@@ -1,0 +1,248 @@
+# Dockerfile
+# hjkim, 2023.07.18
+
+
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+
+RUN apt-get clean && rm -fr /var/lib/apt/lists/*
+RUN apt-get update
+
+RUN apt-get -y install build-essential
+RUN apt-get -y install wget
+RUN apt-get -y install curl
+RUN apt-get -y install git
+RUN apt-get -y install python3
+RUN apt-get -y install python3-pip
+RUN apt-get -y install sed
+RUN apt-get -y install net-tools
+RUN apt-get -y install telnet
+# for killall
+RUN apt-get -y install psmisc
+RUN apt-get -y install mysql-client
+
+RUN apt-get -y install libcurl3-gnutls libcurl3-nss
+RUN apt-get -y install libcurl4-gnutls-dev 
+RUN apt-get -y install libcurl4-nss-dev
+RUN apt-get -y install libcurlpp-dev
+RUN apt-get -y install libcurl4-openssl-dev
+RUN apt-get -y install libmysqlclient-dev
+RUN apt-get -y install libjansson-dev
+RUN apt-get -y install libmpdec-dev
+RUN apt-get -y install libev-dev
+RUN apt-get -y install liblz4-dev
+
+
+
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+
+
+# Kafka
+#
+# from git
+# https://github.com/wurstmeister/kafka-docker
+# //https://github.com/wurstmeister/kafka-docker/archive/1.1.0.tar.gz
+# $ git clone https://github.com/wurstmeister/kafka-docker.git
+#
+# from Docker-Compose
+# $ sudo docker pull wurstmeister/kafka
+# $ sudo docker-compose up -d
+
+
+
+# librdkafka
+#
+# https://github.com/edenhill/librdkafka.git (redirect: https://github.com/confluentinc/librdkafka)
+#
+#RUN git clone https://github.com/edenhill/librdkafka.git
+# or
+#RUN git clone https://github.com/confluentinc/librdkafka.git
+#
+#error: RPC failed; curl 56 GnuTLS recv error (-54): Error in the pull function.
+#fatal: the remote end hung up unexpectedly
+#fatal: early EOF
+#fatal: index-pack failed
+#
+# // USE option '--depth=1'
+#RUN git clone --depth=1 https://github.com/edenhill/librdkafka.git
+#
+# or
+# // resize 'git file buffer'
+# e.g.,
+# postBuffer: 100 MB (1024 * 1024 * 100(MB)) = 104,857,600
+#RUN git config --global ssh.postBuffer 104857600
+#RUN git config --global http.postBuffer 104857600
+#
+# postBuffer: 500 MB (1024 * 1024 * 500(MB)) = 524,288,000
+#RUN git config --global ssh.postBuffer 524288000
+#RUN git config --global http.postBuffer 524288000
+#
+# // clone
+#RUN git clone https://github.com/edenhill/librdkafka.git
+# or
+#RUN git clone https://github.com/confluentinc/librdkafka.git
+#
+# // download
+COPY ./kafka/librdkafka-v2.2.0.tar.gz /
+#RUN wget -O /librdkafka-v2.2.0.tar.gz https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.2.0.tar.gz
+#RUN curl -o /librdkafka-v2.2.0.tar.gz -L https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.2.0.tar.gz
+RUN tar xzvf /librdkafka-v2.2.0.tar.gz -C / && ln -s /librdkafka-2.2.0 /librdkafka
+#
+# // build
+RUN cd /librdkafka && ./configure && make
+
+
+
+# Database: MySQL or MariaDB
+#
+# RUN sed -i -e 's/^bind-address/#&/' /etc/mysql/mariadb.conf.d/50-server.cnf
+# COPY ./PROJECT-NAME.sql /root
+# RUN service mysql restart && mysql -u root --password="" < /root/PROJECT-NAME.sql
+# ENTRYPOINT service mysql restart && tail -f /dev/null
+#
+# $ sudo docker pull mysql:latest
+# $ sudo docker run -d -p 33060:3306 -e MYSQL_ROOT_PASSWORD="..." mysql:latest
+#
+# $ sudo docker pull mariadb:latest
+# $ sudo docker run -d -p 33060:3306 -e MARIADB_ROOT_PASSWORD="..." mariadb:latest
+
+
+
+# Redis (x3: master, slave, slave)
+# from Docker
+# $ sudo docker pull redis
+#
+# Redis sentinel (x3: master, slave, slave)
+# sentinel settings
+# from git
+# https://github.com/vhf/redis-sentinel-docker-example
+# $ git clone https://github.com/vhf/redis-sentinel-docker-example.git
+
+
+
+# Configure script
+COPY ./set_info.sh /
+
+
+
+# ViaBTC source code
+# Copy from local and extract
+COPY ./viabtc_exchange_server_src_2023.07.22.tar /
+RUN tar xvf /viabtc_exchange_server_src_2023.07.22.tar
+#
+# log directory
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/accesshttp"
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/accessws"
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/alertcenter"
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/marketprice"
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/matchengine"
+RUN mkdir -p "/viabtc_exchange_server/logs/trade/readhistory"
+#
+# build
+RUN cd /viabtc_exchange_server/depends/hiredis && make clean && make
+RUN cd /viabtc_exchange_server/network && make clean && make
+RUN cd /viabtc_exchange_server/utils && make clean && make
+RUN cd /viabtc_exchange_server/accesshttp && make clean && make
+RUN cd /viabtc_exchange_server/accessws && make clean && make
+RUN cd /viabtc_exchange_server/alertcenter && make clean && make
+RUN cd /viabtc_exchange_server/marketprice && make clean && make
+RUN cd /viabtc_exchange_server/matchengine && make clean && make
+RUN cd /viabtc_exchange_server/readhistory && make clean && make
+
+
+
+# ViaBTC config.json
+# Edit <'log path', 'DB info', ...>
+# for all service processes (matchengine, alertcenter, readhistory, accesshttp, accessws, marketprice)
+#
+# Working Directory info
+# replace: /mnt/data/viabtc -> /viabtc_exchange_server
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/accesshttp/config.json
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/accessws/config.json
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/alertcenter/config.json
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/marketprice/config.json
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/matchengine/config.json
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\/viabtc_exchange_server/g' /viabtc_exchange_server/readhistory/config.json
+#
+# Kafka Server info
+RUN sed -i -e 's/127.0.0.1:9092/127.0.0.1:9092/g' /viabtc_exchange_server/accessws/config.json
+RUN sed -i -e 's/127.0.0.1:9092/127.0.0.1:9092/g' /viabtc_exchange_server/marketprice/config.json
+RUN sed -i -e 's/127.0.0.1:9092/127.0.0.1:9092/g' /viabtc_exchange_server/matchengine/config.json
+#
+# Redis Server info
+RUN sed -i -e 's/my_redis_master/my_redis_master/g' /viabtc_exchange_server/alertcenter/config.json
+RUN sed -i -e 's/127.0.0.1:26380/127.0.0.1:26380/g' /viabtc_exchange_server/alertcenter/config.json
+RUN sed -i -e 's/127.0.0.1:26381/127.0.0.1:26381/g' /viabtc_exchange_server/alertcenter/config.json
+RUN sed -i -e 's/127.0.0.1:26382/127.0.0.1:26382/g' /viabtc_exchange_server/alertcenter/config.json
+##
+RUN sed -i -e 's/my_redis_master/my_redis_master/g' /viabtc_exchange_server/marketprice/config.json
+RUN sed -i -e 's/127.0.0.1:26380/127.0.0.1:26380/g' /viabtc_exchange_server/marketprice/config.json
+RUN sed -i -e 's/127.0.0.1:26381/127.0.0.1:26381/g' /viabtc_exchange_server/marketprice/config.json
+RUN sed -i -e 's/127.0.0.1:26382/127.0.0.1:26382/g' /viabtc_exchange_server/marketprice/config.json
+#
+# MySQL/MariaDB Server info
+RUN sed -i -e 's/\"host\":\ \"127.0.0.1\",/\"host\":\ \"127.0.0.1\",/g' /viabtc_exchange_server/matchengine/config.json
+RUN sed -i -e 's/\"port\":\ 3306,/\"port\":\ 3306,/g' /viabtc_exchange_server/matchengine/config.json
+RUN sed -i -e 's/\"user\":\ \"root\",/\"user\":\ \"root\",/g' /viabtc_exchange_server/matchengine/config.json
+RUN sed -i -e 's/\"pass\":\ \"mysql\",/\"pass\":\ \"mysql\",/g' /viabtc_exchange_server/matchengine/config.json
+##
+RUN sed -i -e 's/\"host\":\ \"127.0.0.1\",/\"host\":\ \"127.0.0.1\",/g' /viabtc_exchange_server/readhistory/config.json
+RUN sed -i -e 's/\"port\":\ 3306,/\"port\":\ 3306,/g' /viabtc_exchange_server/readhistory/config.json
+RUN sed -i -e 's/\"user\":\ \"root\",/\"user\":\ \"root\",/g' /viabtc_exchange_server/readhistory/config.json
+RUN sed -i -e 's/\"pass\":\ \"mysql\",/\"pass\":\ \"mysql\",/g' /viabtc_exchange_server/readhistory/config.json
+
+
+
+# restart_all.sh, stop_all.sh
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\//g' /viabtc_exchange_server/restart_all.sh
+RUN sed -i -e 's/\/mnt\/data\/viabtc/\//g' /viabtc_exchange_server/stop_all.sh
+
+
+
+# Imports SQL schema
+#  - if has an error, insert 'USE trade_history; or USE trade_log;' below 'CREATE database <trade_...>;'
+#
+# Edit <DB info> for 'init_trade_history.sh'
+#
+RUN sed -i -e 's/MYSQL_HOST=\"127.0.0.1\"/MYSQL_HOST=\"127.0.0.1\"/g' /viabtc_exchange_server/sql/init_trade_history.sh
+RUN sed -i -e 's/MYSQL_PORT=\"3306\"/MYSQL_PORT=\"3306\"/g' /viabtc_exchange_server/sql/init_trade_history.sh
+RUN sed -i -e 's/MYSQL_USER=\"root\"/MYSQL_USER=\"root\"/g' /viabtc_exchange_server/sql/init_trade_history.sh
+RUN sed -i -e 's/MYSQL_PASS=\"mysql\"/MYSQL_PASS=\"mysql\"/g' /viabtc_exchange_server/sql/init_trade_history.sh
+#
+# Import
+#RUN cd /viabtc_exchange_server/sql && mysql -h 127.0.0.1 -u root --password="mysql" -P 3306 < create_trade_history.sql
+#RUN cd /viabtc_exchange_server/sql && mysql -h 127.0.0.1 -u root --password="mysql" -P 3306 < create_trade_log.sql
+#
+# Initialize
+# DB info required
+#RUN cd /viabtc_exchange_server/sql && ./init_trade_history.sh
+
+
+
+# Permission
+#RUN groupadd -g 1000 test
+#RUN useradd -r -u 1000 -g test test
+#USER test:test
+
+
+
+# ENTRYPOINT
+#ENTRYPOINT /usr/share/tomcat9/bin/startup.sh && service mysql restart && apachectl -D FOREGROUND
+ENTRYPOINT tail -f /dev/null
+#
+#ENTRYPOINT cd /viabtc_exchange_server/matchengine && ./restart.sh && \
+#  cd ../alertcenter && ./restart.sh && \
+#  cd ../readhistory && ./restart.sh && \
+#  cd ../accesshttp && ./restart.sh && \
+#  cd ../accessws && ./restart.sh && \
+#  cd ../marketprice && ./restart.sh && \
+#
+#ENTRYPOINT cd /viabtc_exchange_server && ./restart_all.sh && \
+#  tail -f /dev/null
+
+

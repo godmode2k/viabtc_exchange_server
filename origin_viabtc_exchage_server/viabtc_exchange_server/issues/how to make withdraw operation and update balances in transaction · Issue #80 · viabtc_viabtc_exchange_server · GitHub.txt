@@ -1,0 +1,97 @@
+
+
+https://github.com/viabtc/viabtc_exchange_server/issues/80
+
+
+how to make withdraw operation and update balances in transaction? #80
+Open
+LittlePeng opened this issue Apr 19, 2018 · 5 comments
+Comments
+@LittlePeng
+LittlePeng commented Apr 19, 2018 •
+
+比如用户要提现 100BTC，这时需要写一条提现记录和给用户balance上减去100BTC，要更新的两条记录分别在MySQL和matchengine ， 我理解的应该使用2PC来完成：
+예를 들어 사용자가 100BTC를 출금하고자 하는데 이때 출금 기록을 작성하고 사용자 잔고에서 100BTC를 빼야 하는데 갱신할 두 기록은 각각 MySQL과 매치엔진에 있다.
+
+    1: RPC CMD_BALANCE_QUERY 确认用户余额，如果余额足够，则写入 prepare withdraw 记录
+RPC CMD_BALANCE_QUERY는 사용자 잔액을 확인하고, 잔액이 충분하면 출금 기록을 준비합니다.
+    2: RPC CMD_BALANCE_UPDATE 扣款，如果：
+다음과 같은 경우 RPC CMD_BALANCE_UPDATE 공제:
+        成功: commit withdraw 更新
+성공: 인출 업데이트 커밋
+        失败: abort withdraw 取消
+실패: 철회 취소 중단
+        超时: 使用相同business_id重试
+시간 초과: 동일한 business_id로 재시도
+
+存在几率：2PC完成用户提现成功，但CMD_BALANCE_UPDATE 操作还处于 me_persist.c 队列未能落地，如果此时matchengine宕机，balance就没能扣款。
+존재 확률: 2PC는 사용자의 출금을 성공적으로 완료하지만 CMD_BALANCE_UPDATE 작업은 여전히 ​​me_persist.c 대기열에 있으며 착륙에 실패합니다. 이때 매치 엔진이 다운되면 잔액에서 돈을 차감할 수 없습니다.
+
+想到个解决思路是：由于问题在于CMD_BALANCE_UPDATE返回成功时并不能确保balance扣款成功。那么就不依赖CMD_BALANCE_UPDATE返回成功， commit withdraw时把operlog在事务里面也写一遍不就行了么。operlog被多记录一次也没事，business_id 保证更新操作的幂等性，但发现operlog 的id字段由matchengine生成不是自增主键，并不能这么做。
+해결책을 생각합니다. 문제는 CMD_BALANCE_UPDATE가 성공적으로 반환될 때 잔액 공제가 성공했는지 확인할 수 없다는 것입니다. 그러면 성공을 반환하기 위해 CMD_BALANCE_UPDATE에 의존할 필요가 없습니다.인출을 커밋할 때 트랜잭션에 operlog를 작성할 수도 있습니다. operlog를 한 번 더 기록해도 상관없다.business_id는 업데이트 작업의 멱등성을 보장하지만, operlog의 id 필드는 matchengine에서 생성한 auto-incrementing 기본 키가 아닌 것으로 확인되어 이를 수행할 수 없다.
+
+
+另外一些想法：
+다른 생각:
+
+    保证写操作持久性
+    现在balance和orders的写入RPC返回时，并不保证数据落地，操作有:CMD_BALANCE_UPDATE、CMD_ORDER_xx, 最多可能会丢失 MAX_PENDING_OPERLOG 100条记录，而且 matchengine 宕机后balance_history、order_history、deal_history 可能数据还可能对不齐。
+쓰기 작업의 내구성 보장
+이제 잔액 및 주문의 쓰기 RPC가 반환되면 데이터 랜딩이 보장되지 않습니다. 작업에는 CMD_BALANCE_UPDATE, CMD_ORDER_xx가 포함되며 최대 MAX_PENDING_OPERLOG 100개의 레코드가 손실될 수 있으며 매치 엔진 충돌 후 balance_history, order_history 및 deal_history 데이터가 정렬되지 않을 수 있습니다.
+
+    可借鉴 MySQL group commit 实现，写操作等对应的日志刷库成功后再异步返回，保证持久性的同时也不影响吞吐量。当然增加点延时在所难免，正常也能控制在100ms内。
+MySQL 그룹 커밋 구현에서 학습하고 쓰기 작업 및 기타 해당 로그 데이터베이스가 성공적으로 새로 고쳐진 후 비동기적으로 반환하여 처리량에 영향을 주지 않고 지속성을 보장할 수 있습니다. 물론 딜레이 증가는 불가피하며 보통 100ms 이내로 제어가 가능하다.
+
+    matchengine 支持 slave 模式
+    matchengine 是单点、而且是单线程，需要处理整个交易所的所有balance和order请求，吞吐量存在瓶颈应该给减轻负担。很多时候balance、order读操作都是允许一定的延时，如果matchengine 支持slave 通过kafka replication到多个节点以提供读操作。
+매치 엔진은 슬레이브 모드를 지원합니다
+매치 엔진은 단일 지점 및 단일 스레드이며 전체 교환의 모든 균형 및 주문 요청을 처리해야 하며 처리량의 병목 현상은 부담을 줄여야 합니다. 대부분의 경우 균형 및 주문 읽기 작업에 대해 특정 지연이 허용됩니다.매치 엔진이 Kafka 복제를 통해 여러 노드에 대한 슬레이브를 지원하여 읽기 작업을 제공하는 경우.
+
+@haipome
+Member
+haipome commented Apr 24, 2018
+
+1：关于“CMD_BALANCE_UPDATE返回成功时并不能确保balance扣款成功“这个问题确实存在的，实现时对数据的完备性和效率做了一些取舍。未来考虑通过更好的办法来保证操作记录落地。
+"CMD_BALANCE_UPDATE가 성공적으로 반환되어도 잔액 차감이 성공했는지 확인하지 못함" 문제와 관련하여 이 문제는 존재하며 구현 중에 데이터 완전성과 효율성을 위해 일부 절충이 이루어졌습니다. 앞으로는 운영 기록의 구현을 보장하기 위해 더 나은 방법을 고려할 것입니다.
+
+2：“而且 matchengine 宕机后balance_history、order_history、deal_history 可能数据还可能对不齐。”这个问题也是存在的，但相对于问题1没有那么严重。
+"그리고 매치엔진이 다운된 후 balance_history, order_history, deal_history 데이터가 정렬되지 않을 수 있습니다." 이 문제도 존재하지만 문제 1만큼 심각하지는 않습니다.
+
+3、这个是在计划中的。
+이것은 계획된 것입니다
+.
+@LittlePeng
+Author
+LittlePeng commented Apr 25, 2018 •
+
+多谢回答，期待新的版本。Great Work，这个项目构架思路真的很赞👍👍👍👍
+답장을 보내 주셔서 감사합니다. 새 버전을 기대합니다. 위대한 작품, 이 프로젝트 구조의 아이디어는 정말 좋습니다
+
+本想交易引擎如果如果不采用IOE，就得引入复杂分布式事务系统。 关键在于全量的 balance 和 orders 数据量很小，通过可以通过本地内存事务来实现；好像也可以用mnesia集群或者用全量缓存的rocksdb(LSM-Tree类存储引擎)+Raft来搞。
+트랜잭션 엔진이 IOE를 사용하지 않으면 복잡한 분산 트랜잭션 시스템을 도입해야 한다고 생각했습니다. 핵심은 잔액 및 주문 데이터의 전체 양이 매우 적고 로컬 메모리 트랜잭션을 통해 실현될 수 있다는 것입니다.
+
+@tornodo
+tornodo commented May 9, 2018
+
+目前的情况是如何临时解决这俩问题？🤦‍♂️
+현재 상황에서 이 두 가지 문제를 일시적으로 해결하는 방법은 무엇입니까?
+
+等出了意外再给用户解释就晚了。😭
+사고가 났을 때 사용자에게 설명하기에는 너무 늦을 것입니다.
+
+@haipome
+Member
+haipome commented May 11, 2018
+
+系统设计的时候在效率和一致性做了取舍，选择了效率。
+系统本身是严格按照顺序对 operlog 进行落地的，如果真的出现了异常情况，会丢失最新不超过1秒的交易记录，这个是可以接受的。
+시스템을 설계하는 동안 효율성과 일관성 사이에서 트레이드 오프가 이루어졌으며 효율성이 선택되었습니다.
+시스템 자체에서 엄격한 순서로 operlog를 구현하며 비정상적인 상황이 발생하면 1초 이내의 최근 트랜잭션 기록이 손실되므로 허용됩니다.
+
+@tornodo
+tornodo commented May 11, 2018
+
+收到，感谢。😄🙏
+알겠습니다. 감사합니다.
+
+

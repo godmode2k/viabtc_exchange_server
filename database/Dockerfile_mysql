@@ -1,0 +1,29 @@
+# Dockerfile
+# hjkim, 2022.05.25
+
+# You need to specify one of the following as an environment variable:
+# MYSQL_ROOT_PASSWORD, MYSQL_ALLOW_EMPTY_PASSWORD, MYSQL_RANDOM_ROOT_PASSWORD
+# $ docker run -d -e MYSQL_ROOT_PASSWORD="..." -p 33060:3306 mysql:latest
+
+
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+RUN apt-get update
+RUN apt-get -y install sed
+RUN apt-get -y install mysql-server
+RUN apt-get -y install mysql-client
+
+
+
+RUN sed -i -e 's/^bind-address/#&/' /etc/mysql/mysql.conf.d/mysqld.cnf
+RUN sed -i -e 's/^mysqlx-bind-address/#&/' /etc/mysql/mysql.conf.d/mysqld.cnf
+#COPY ./PROJECT-NAME.sql /root
+#RUN service mysql restart && mysql -u root --password="" < /root/PROJECT-NAME.sql
+
+
+ENTRYPOINT service mysql restart && tail -f /dev/null
+

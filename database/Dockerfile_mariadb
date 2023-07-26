@@ -1,0 +1,28 @@
+# Dockerfile
+# hjkim, 2022.05.25
+
+# You need to specify one of
+# MARIADB_ROOT_PASSWORD, MARIADB_ALLOW_EMPTY_ROOT_PASSWORD, MARIADB_RANDOM_ROOT_PASSWORD
+# $ docker run -d -e MARIADB_ROOT_PASSWORD="..." -p 33060:3306 mariadb:latest
+
+
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+RUN apt-get update
+RUN apt-get -y install sed
+RUN apt-get -y install mariadb-server
+RUN apt-get -y install mysql-client
+
+
+
+RUN sed -i -e 's/^bind-address/#&/' /etc/mysql/mariadb.conf.d/50-server.cnf
+#COPY ./PROJECT-NAME.sql /root
+#RUN service mysql restart && mysql -u root --password="" < /root/PROJECT-NAME.sql
+
+
+ENTRYPOINT service mysql restart && tail -f /dev/null
+
