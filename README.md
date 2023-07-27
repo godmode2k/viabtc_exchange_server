@@ -16,6 +16,7 @@ Environment
     Kafka
     Redis-Sentinel
     Database: MySQL or MariaDB
+    ViaBTC-Exchange-Server (https://github.com/viabtc/viabtc_exchange_server)
 
 
 ## Directory
@@ -31,7 +32,7 @@ Environment
  - redis-sentinel (redis-sentinel-docker-example)
 
 * origin_viabtc_exchange_server
- - source-based
+ - source-based (https://github.com/viabtc/viabtc_exchange_server)
 ```
 
 
@@ -41,10 +42,11 @@ Environment
 
 ```
 1. Build
- Ubuntu 20.04 LTS x86_64 (with MySQL 8.x, MariaDB)
+ OS: Ubuntu 20.04 LTS x86_64
  Docker (Ubuntu 20.04),
  Kafka: librdkafka v2.2.0, Kafka (bitnami-kafka-docker: Docker image)
- Redis: redis v4.0.10 (Docker image)
+ Redis: redis v4.0.10, redis-sentinel (Docker image)
+ ViaBTC-Exchange-Server: Ubuntu 20.04 LTS x86_64 (with MySQL 8.x, MariaDB)
 
 
 2. Listing/Delisting without restart services. [in-progress]
